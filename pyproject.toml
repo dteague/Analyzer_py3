@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "analysis"
+version = "0.1.0"
+description = ""
+authors = ["Dylan Teague <dteague@wisc.edu>"]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+awkward1 = "^0.2.31"
+uproot4 = "^0.0.17"
+numba = "^0.51.0"
+
+[tool.poetry.dev-dependencies]
+ipython = "7.0"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
