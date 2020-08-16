@@ -44,6 +44,9 @@ class Process:
                 events = file["Events"].arrays(var)
                 if org_mask is not None:
                     events = events[self.masks[org_mask]]
+                for col in events.columns:
+                    if "bool" in repr(ak.type(events[col])):
+                        events[col] = events[col] + 0
                 getattr(self, func)(events[var],  mask)
                 self.masks[write_name] = mask.snapshot()
 

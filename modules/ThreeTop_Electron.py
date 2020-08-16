@@ -19,12 +19,7 @@ class Electron(Process):
         tight = self.prefix(head, ["pt", "lostHits", "tightCharge", "sip3d",
                                    "miniPFRelIso_all", "dr03EcalRecHitSumEt",
                                    "dr03HcalDepth1TowerSumEt", "dr03TkSumPt"])
-        self.variables = np.unique(np.concatenate((loose, emu, tight)))
-
-        # self.spectators = ["pt", "eta", "phi", "mass", "charge"]
-        # self.variables = self.prefix(head, list(set(self.cuts) | set(self.spectators)))
-
-
+        
         self.extraFuncs = [
             ("loose_mask", "Electron_looseMask", None, loose),
             ("trigger_emu", "Electron_looseMask", "Electron_looseMask", emu),
@@ -40,7 +35,7 @@ class Electron(Process):
             for j in range(len(event["Electron_pt"])):
                 builder.boolean(
                     event.Electron_pt[j] > 7 and
-                    #event.Electron_convVeto[j] and
+                    event.Electron_convVeto[j] == 1 and
                     event.Electron_lostHits[j] <= 1 and
                     event.Electron_miniPFRelIso_all[j] < 0.4 and
                     np.abs(event.Electron_dz[j]) < 0.1 and
