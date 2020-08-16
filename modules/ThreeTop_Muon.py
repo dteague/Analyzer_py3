@@ -5,7 +5,7 @@ import awkward1 as ak
 import numpy as np
 import numba
 
-from segment import Process
+from python.Process import Process
 
 class Muon(Process):
     def __init__(self):

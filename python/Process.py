@@ -5,7 +5,7 @@ import awkward1 as ak
 import numpy as np
 import numba
 
-from scheduler import Scheduler
+from python.Scheduler import Scheduler
 
 class Process:
     def __init__(self, array=None):

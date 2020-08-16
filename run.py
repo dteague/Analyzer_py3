@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-from scheduler import Scheduler
+from python.Scheduler import Scheduler
 
-from Electron import Electron
-from Muon import Muon
-from Jet import Jet
+from modules import Electron, Muon, Jet
 
 
-schedule = (Electron() | Muon()) & Jet()
+schedule = (
+    ( Electron() | Muon() ) &
+    Jet()
+)
 schedule.run()
