@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 from python.Scheduler import Scheduler
+from modules import Electron, Muon, Jet, EventWide
 
-from modules import Electron, Muon, Jet
+     
+schedule = Scheduler()
+schedule.set_files({"TTT": "tree*.root"})
 
+schedule.add_step([Muon, Electron])
+schedule.add_step([Jet])
+schedule.add_step([EventWide])
 
-schedule = (
-    ( Electron() | Muon() ) &
-    Jet()
-)
 schedule.run()

@@ -5,52 +5,57 @@ import awkward1 as ak
 import numpy as np
 import numba
 
-from python.Scheduler import Scheduler
-
 class Process:
     def __init__(self, array=None):
         self.extraFuncs = list()
-        if array is None:
-            self.masks = ak.Array({})
-        else:
-            self.masks = array
-
-    def __add__(self, other):
-        proc = Process(self.masks)
-        for col in other.masks.columns:
-            proc.masks[col] = other.masks[col]
-        return proc
-
+        self.masks = list()
+                    
     def __iadd__(self, other):
-        for col in other.masks.columns:
-            self.masks[col] = other.masks[col]
+        if not self.masks:
+            self.masks = [ak.Array({}) for i in range(len(other.masks))]
+        for i in range(len(other.masks)):
+            for col in other.masks[i].columns:
+                self.masks[i][col] = other.masks[i][col]
+        return self
 
-    def __or__(self, other):
-        if isinstance(other, Scheduler):
-            return Scheduler([self] + other.process_list)
-        else:
-            return Scheduler([self] + [other])
-
-    def __and__(self, other):
-        if isinstance(other, Scheduler):
-            return Scheduler([[self], other.process_list])
-        else:
-            return Scheduler([[self], [other]])
-
-    def run(self):
-        with uproot.open("tree_1.root") as file:
+    def run(self, filename):
+        allvars = self.get_all_vars()
+        for i, array in enumerate(uproot.iterate("{}:Events".format(filename), allvars)):
             for func, write_name, org_mask, var in self.extraFuncs:
-                mask = ak.ArrayBuilder()
-                events = file["Events"].arrays(var)
-                if org_mask is not None:
-                    events = events[self.masks[org_mask]]
-                for col in events.columns:
-                    if "bool" in repr(ak.type(events[col])):
-                        events[col] = events[col] + 0
-                getattr(self, func)(events[var],  mask)
-                self.masks[write_name] = mask.snapshot()
+                self.masks.append(ak.Array({}))
+                events = array[var]
+                if isinstance(org_mask, str):
+                    events = events[self.masks[i][org_mask]]
+                elif isinstance(org_mask, dict):
+                    for val, mask_name in org_mask.items():
+                        var_apply = np.array(events.columns)[[val in col for col in events.columns]]
+                        for col in var_apply:
+                            events[col] = events[col][self.masks[i][mask_name]]
+                # For different runtypes
+                if self.isJit(func):
+                    mask = ak.ArrayBuilder()
+                    getattr(self, func)(events,  mask)
+                    self.masks[i][write_name] = mask.snapshot()
+                elif self.isVectorize(func):
+                    variables = [events[col] for col in var]
+                    #print([ak.type(v[0]) for v in variables])
+                    self.masks[i][write_name] = getattr(self, func)(*variables)
+                else:
+                    mask = ak.ArrayBuilder()
+                    self.masks[i][write_name] = getattr(self, func)(events[var])
+
+    def get_all_vars(self):
+        return_set = set()
+        for _, _, _, var_list in self.extraFuncs:
+            return_set |= set(var_list)
+        return list(return_set)
 
     @staticmethod
     def prefix(pre, lister):
         return ["_".join([pre, l]) for l in lister]
     
+    def isJit(self, funcName):
+        return "Dispatcher" in repr(getattr(self, funcName))
+
+    def isVectorize(self, funcName):
+        return "DUFunc" in repr(getattr(self, funcName))

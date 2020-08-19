@@ -1,35 +1,23 @@
 #!/usr/bin/env python3
 
-class Scheduler():
-    def __init__(self, proc=None):
-        if proc is None:
-            self.process_list = list()
-        else:
-            self.process_list = proc
+import python.Job as Job
+import python.Process as Process
 
-    def __or__(self, other):
-        if isinstance(other, Scheduler):
-            return Scheduler(self.process_list + other.process_list)
-        else:
-            return Scheduler(self.process_list + [other])
+class Scheduler:
+    def __init__(self):
+        self.jobs = []
+        self.mask_dict = dict()
+        self.file_dict = dict()
 
+    def add_step(self, class_list):
+        self.jobs.append(Job(class_list))
 
-    def __and__(self, other):
-        if isinstance(other, Scheduler):
-            return Scheduler([self.process_list, other.process_list])
-        else:
-            return Scheduler([self.process_list, [other]])
+    def set_files(self, file_dict):
+        self.file_dict = file_dict
+        for key, val in file_dict.items():
+            self.mask_dict[key] = Process()
 
     def run(self):
-        self.recursive_run(self.process_list)
-
-    def recursive_run(self, run_list):
-        for item in run_list:
-            if isinstance(item, list):
-                self.recursive_run(item)
-            else:
-                print(item)
-                item.run()
-
-    def __str__(self):
-        return str(self.process_list)
+        for group, files in self.file_dict.items():
+            for job in self.jobs:
+                self.mask_dict[group] += job.run(files)
