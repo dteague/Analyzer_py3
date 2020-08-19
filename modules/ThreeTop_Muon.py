@@ -11,47 +11,69 @@ class Muon(Process):
     def __init__(self):
         super().__init__()
 
-        head = "Muon"
-        loose = self.prefix(head, ["pt", 'dxy', 'dz',"isGlobal", "isTracker",
-                                    "isPFcand", 'miniPFRelIso_all',])
-        tight = self.prefix(head, ["pt", 'miniPFRelIso_all', "tightCharge",
-                                   "mediumId", "sip3d"])
-        
         self.extraFuncs = [
-            ("loose_mask", "Muon_looseMask", None, loose),
-            ("tight_mask", "Muon_tightMask", "Muon_looseMask", tight)
+            ("loose_mask", "Muon_looseMask", None, Muon.loose),
+            ("fake_mask", "Muon_fakeMask", None, Muon.fake),
+            ("closeJet", "Muon_closeJetIndex", {"Muon_": "Muon_fakeMask"}, Muon.close_jet),
+            ("tight_mask", "Muon_tightMask", "Muon_fakeMask", Muon.tight),
         ]
 
     # Numba methods
-    
+
+    loose = Process.prefix("Muon", ["pt", "isGlobal", "isTracker", "isPFcand",
+                                'miniPFRelIso_all', 'dxy', 'dz'])
     @staticmethod
-    @numba.jit(nopython=True)
-    def loose_mask(events, builder):
-        for event in events:
-            builder.begin_list()
-            for j in range(len(event["Muon_pt"])):
-                builder.boolean(
-                    event.Muon_pt[j] > 5 and
-                    (event.Muon_isGlobal[j] == 0 or event.Muon_isTracker[j] == 0) and
-                    event.Muon_isPFcand[j] == 1 and
-                    event.Muon_miniPFRelIso_all[j] < 0.4 and
-                    np.abs(event.Muon_dz[j]) < 0.1 and
-                    np.abs(event.Muon_dxy[j]) < 0.05
-                )
-            builder.end_list()
+    @numba.vectorize('b1(f4,b1,b1,b1,f4,f4,f4)')
+    def loose_mask(pt, isGlobal, isTracker, isPFcand, iso, dz, dxy):
+        return (pt > 5 and
+           (isGlobal or isTracker) and
+           isPFcand and
+           iso < 0.4 and
+           np.abs(dz) < 0.1 and
+           np.abs(dz) < 0.05
+           )
+
+    fake = Process.prefix("Muon", [ "tightCharge", "mediumId", "sip3d"])
+    @staticmethod
+    @numba.vectorize('b1(i4,b1,f4)')
+    def fake_mask(tightCharge, mediumId, sip3d):
+        return (
+            tightCharge == 2 and
+            mediumId and
+            sip3d < 4
+           )
+
+    tight = Process.prefix("Muon", ["pt", 'miniPFRelIso_all'])
+    @staticmethod
+    @numba.vectorize('b1(f4,f4)')
+    def tight_mask(pt, iso):
+        return (
+            pt > 20 and
+            iso < 0.16
+           )
+
+    close_jet = ["Muon_eta", "Muon_phi", "Jet_eta", "Jet_phi"]
+    def setup_closeJet(self, events):
+        #muons = events[["Muon_eta", "Muon_phi"]][self.masks["Muon_fakeableMask"]]
+        meta, jeta = ak.unzip(ak.cartesian([events.Muon_eta, events.Jet_eta], nested=True, axis=1))
+        mphi, jphi = ak.unzip(ak.cartesian([events.Muon_phi, events.Jet_phi], nested=True, axis=1))
+
+        diff = (meta - jeta)**2 + (mphi - jphi)**2
+        return ak.argmin(diff, axis=2)
 
     @staticmethod
     @numba.jit(nopython=True)
-    def tight_mask(events, builder):
+    def closeJet(events, builder):
         for event in events:
             builder.begin_list()
-            for j in range(len(event["Muon_pt"])):
-                builder.boolean(
-                    event.Muon_pt[j] > 20 and
-                    event.Muon_miniPFRelIso_all[j] < 0.16 and
-                    event.Muon_tightCharge[j] == 2 and
-                    event.Muon_mediumId[j] == 1 and
-                    event.Muon_sip3d[j] < 4
-                )
+            for midx in range(len(event.Muon_eta)):
+                mindr = 0.16  # 0.4**2
+                minidx = -1
+                for jidx in range(len(event.Jet_eta)):
+                    dr = (event.Muon_eta[midx] - event.Jet_eta[jidx])**2 + \
+                        (event.Muon_phi[midx] - event.Jet_phi[jidx])**2
+                    if mindr > dr:
+                        mindr = dr
+                        minidx = jidx
+                builder.integer(minidx)
             builder.end_list()
-
