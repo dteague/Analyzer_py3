@@ -8,8 +8,8 @@ import numba
 from python.Process import Process
 
 class Jet(Process):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, process):
+        super().__init__(process)
         self.extraFuncs = [("jet_mask", "Jet_jetMask", None, Jet.jet),
                            ("bjet_mask", "Jet_bjetMask", None, Jet.bjet),
                            ("calc_HT", "Jet_HT", "Jet_jetMask", Jet.ht)]

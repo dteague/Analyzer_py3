@@ -6,9 +6,12 @@ import numpy as np
 import numba
 
 class Process:
-    def __init__(self, array=None):
+    def __init__(self, process = None):
         self.extraFuncs = list()
-        self.masks = list()
+        if process is None:
+            self.masks = list()
+        else:
+            self.masks = process.masks
                     
     def __iadd__(self, other):
         if not self.masks:
@@ -32,6 +35,7 @@ class Process:
                         for col in var_apply:
                             events[col] = events[col][self.masks[i][mask_name]]
                 # For different runtypes
+                #print(func, repr(getattr(self, func)))
                 if self.isJit(func):
                     mask = ak.ArrayBuilder()
                     getattr(self, func)(events,  mask)

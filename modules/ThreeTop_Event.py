@@ -12,8 +12,8 @@ from python.Process import Process
 
 
 class EventWide(Process):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, process):
+        super().__init__(process)
         self.extraFuncs = [
             ("met_filter", "Event_MetFilterMask", None, EventWide.filters),
             ("pileup_scale", "Event_pileupScale", None, ["Pileup_nTrueInt"]),

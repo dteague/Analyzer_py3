@@ -8,8 +8,8 @@ import numba
 from python.Process import Process
 
 class Muon(Process):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, process):
+        super().__init__(process)
 
         self.extraFuncs = [
             ("loose_mask", "Muon_looseMask", None, Muon.loose),

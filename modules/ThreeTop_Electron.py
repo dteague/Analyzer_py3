@@ -8,8 +8,8 @@ import numba
 from python.Process import Process
 
 class Electron(Process):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, process):
+        super().__init__(process)
 
         self.extraFuncs = [
             ("loose_mask", "Electron_looseMask", None, Electron.loose),
