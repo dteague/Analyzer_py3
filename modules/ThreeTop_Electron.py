@@ -21,15 +21,13 @@ class Electron(Process):
         self.add_job("fake_mask", outmask = "Electron_fakeMask",
                      inmask = "Electron_looseMvaMask", vals = Electron.fake)
         self.add_job("closeJet", outmask = "Electron_closeJetIndex",
-                     inmask = {"Electron_fakeMask": "Electron_"},
-                     vals = Electron.close_jet)
+                     inmask = "Electron_fakeMask", vals = Electron.close_jet)
         self.add_job("tight_mask", outmask = "Electron_tightMask",
                      inmask = "Electron_fakeMask", vals = Electron.tight)
         self.add_job("mva_tight_2016", outmask = "Electron_tightMVAMask",
                      inmask = "Electron_tightMask", vals = Electron.mva_2016)
         self.add_job("fullIso", outmask = "Electron_fullIsoMask",
-                     inmask = {"Electron_tightMVAMask": "Electron_"},
-                     vals = Electron.v_fullIso,
+                     inmask = "Electron_tightMVAMask", vals = Electron.v_fullIso,
                      addvals = {"Electron_closeJetIndex": "Electron_tightMVAMask"})
 
     mva_2016 = Process.prefix("Electron", ["pt", "eta", "mvaFall17V2noIso"])
@@ -190,14 +188,10 @@ class Electron(Process):
     @staticmethod
     @numba.jit(nopython=True)
     def closeJet(events, builder):
-        i = 0
         for event in events:
             builder.begin_list()
             for eidx in range(len(event.Electron_eta)):
-                if event.Electron_eta[eidx] is None:
-                    builder.null()
-                    continue
-                mindr = 100
+                mindr = 10
                 minidx = -1
                 for jidx in range(len(event.Jet_eta)):
                     dr = (event.Electron_eta[eidx] - event.Jet_eta[jidx])**2 \
@@ -205,11 +199,9 @@ class Electron(Process):
                     if mindr > dr:
                         mindr = dr
                         minidx = jidx
-
                 builder.integer(minidx)
-
             builder.end_list()
-            i+= 1
+
 
     
     v_fullIso = ["Electron_pt", "Electron_eta", "Electron_phi",
@@ -222,11 +214,7 @@ class Electron(Process):
         for event in events:
             builder.begin_list()
             for eidx in range(len(event.Electron_eta)):
-                if event.Electron_eta[eidx] is None:
-                    builder.null()
-                    continue
                 jidx = event.Electron_closeJetIndex[eidx]
-                print(jidx)
                 if event.Electron_pt[eidx]/event.Jet_pt[jidx] > I2:
                     builder.boolean(True)
                     continue

@@ -11,12 +11,37 @@ class Jet(Process):
     def __init__(self, process):
         super().__init__(process)
 
+        self.add_job("closeJet", outmask="Jet_rmCloseJet", vals = Jet.close_jet,
+                     addvals = {"Electron_closeJetIndex": "Electron_fakeMask",
+                                "Muon_closeJetIndex": "Muon_fakeMask"})
         self.add_job("jet_mask", outmask = "Jet_jetMask", vals = Jet.jet)
         self.add_job("bjet_mask", outmask = "Jet_bjetMask", vals = Jet.bjet)
         self.add_job("calc_HT", outmask = "Jet_HT", inmask = "Jet_jetMask",
                      vals = Jet.ht)
 
     # Numba methods
+    close_jet = ["Muon_eta", "Muon_phi", "Jet_eta", "Jet_phi",
+                 "Electron_eta", "Electron_phi"]
+    @staticmethod
+    @numba.jit(nopython=True)
+    def closeJet(events, builder):
+        pass
+        # for event in events:
+        #     builder.begin_list()
+        #     for eidx in range(len(event.Electron_eta)):
+        #         mindr = 10
+        #         minidx = -1
+        #         for jidx in range(len(event.Jet_eta)):
+        #             dr = (event.Electron_eta[eidx] - event.Jet_eta[jidx])**2 \
+        #                 + (event.Electron_phi[eidx] - event.Jet_phi[jidx])**2
+        #             if mindr > dr:
+        #                 mindr = dr
+        #                 minidx = jidx
+        #         builder.integer(minidx)
+        #     builder.end_list()
+
+
+
     jet = Process.prefix("Jet", ["pt", "eta", "jetId"])
     @staticmethod
     @numba.vectorize('b1(f4,f4,i4)')
@@ -52,63 +77,3 @@ class Jet(Process):
                 HT += event.Jet_pt[j]
             builder.real(HT)
 
-# size_t ThreeLepSelector::getCloseJetIndex(LorentzVector& lep, double minDR ) {
-#     size_t minIndex = -1;
-
-#     for(size_t index = 0; index < nJet; ++index) {
-#         LorentzVector jet = get4Vector(PID_JET, index);
-#         double dr = reco::deltaR(jet, lep);
-#         if(minDR > dr) {
-#             minDR = dr;
-#             minIndex = index;
-#         }
-#     }
-#     return minIndex;
-# }
-#     @numba.jit(nopython=True)
-#     def calc_HT(events, builder):
-#         for event in events:
-#             HT = 0
-#             for j in range(len(event["Jet_pt"])):
-#                 HT += event.Jet_pt[j]
-#             builder.real(HT)
-
-
-# bool ThreeLepSelector::passFullIso(LorentzVector& lep, double I2, double I3) {
-#     int closeIdx = getCloseJetIndex(lep);
-#     LorentzVector closeJet  = get4Vector(PID_JET, closeIdx);
-# #ifdef CLOSEJET_REWEIGHT
-#     closeJet = (Jet_L1[closeIdx]*(1-Jet_rawFactor[closeIdx])*closeJet-lep)*Jet_L2L3[closeIdx]+lep;
-# #endif // CLOSEJET_REWEIGHT
-
-#     return (lep.Pt()/closeJet.Pt() > I2) || (LepRelPt(lep, closeJet) > I3);
-# }
-
-
-# double ThreeLepSelector::LepRelPt(LorentzVector& lep, LorentzVector& closeJet) {
-#     auto diff = closeJet.Vect() - lep.Vect();
-#     auto cross = diff.Cross(lep.Vect());
-#     return std::sqrt(cross.Mag2()/diff.Mag2());
-# }
-
-
-
-# bool ThreeLepSelector::passFakeableCuts(GoodPart& lep) {
-#     int index = lep.index;
-#     if(lep.Pt() < 10) return false;
-#     if(lep.Id() == PID_MUON) {
-#         return (Muon_mediumId[index]
-#            && Muon_sip3d[index] < 4
-#            && Muon_tightCharge[index] == 2
-#            && passFullIso(lep.v, 0.72, 7.2)
-
-# 		);
-#     }
-#     else {
-#         return (Electron_sip3d[index] < 4
-#            && Electron_tightCharge[index] == 2
-#            && Electron_lostHits[index] == 0
-#            && passFullIso(lep.v, 0.8, 7.2)
-# 		);
-#     }
-# }

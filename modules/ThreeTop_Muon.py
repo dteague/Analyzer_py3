@@ -4,6 +4,7 @@ import uproot4 as uproot
 import awkward1 as ak
 import numpy as np
 import numba
+import math
 
 from python.Process import Process
 
@@ -15,11 +16,13 @@ class Muon(Process):
                      vals = Muon.loose)
         self.add_job("fake_mask", outmask = "Muon_fakeMask",
                      inmask = "Muon_looseMask", vals = Muon.fake)
-        self.add_job("setupcloseJet", outmask = "Muon_closeJetIndex",
-                     inmask = {"Muon_fakeMask": "Muon_"},
-                     vals = Muon.close_jet)
+        self.add_job("closeJet", outmask = "Muon_closeJetIndex",
+                     inmask = "Muon_fakeMask", vals = Muon.close_jet)
         self.add_job("tight_mask", outmask = "Muon_tightMask",
                      inmask = "Muon_fakeMask", vals = Muon.tight)
+        self.add_job("fullIso", outmask = "Muon_fullIsoMask",
+                     inmask = "Muon_tightMask", vals = Muon.v_fullIso,
+                     addvals = {"Muon_closeJetIndex": "Muon_tightMask"})
 
 
     # Numba methods
@@ -33,8 +36,8 @@ class Muon(Process):
            (isGlobal or isTracker) and
            isPFcand and
            iso < 0.4 and
-           np.abs(dz) < 0.1 and
-           np.abs(dz) < 0.05
+           abs(dz) < 0.1 and
+           abs(dz) < 0.05
            )
 
     fake = Process.prefix("Muon", [ "tightCharge", "mediumId", "sip3d"])
@@ -57,27 +60,12 @@ class Muon(Process):
            )
 
     close_jet = ["Muon_eta", "Muon_phi", "Jet_eta", "Jet_phi"]
-    #close_jet = ["Muon_eta", "Muon_phi"]
-    @staticmethod
-    @numba.jit
-    def setupcloseJet(events):
-        #muons = events[["Muon_eta", "Muon_phi"]][self.masks["Muon_fakeableMask"]]
-        meta, jeta = ak.unzip(ak.cartesian([events.Muon_eta, events.Jet_eta], nested=True, axis=1))
-        mphi, jphi = ak.unzip(ak.cartesian([events.Muon_phi, events.Jet_phi], nested=True, axis=1))
-
-        diff = (meta - jeta)**2 + (mphi - jphi)**2
-        return ak.argmin(diff, axis=2)
-
     @staticmethod
     @numba.jit(nopython=True)
     def closeJet(events, builder):
-        i = 0
         for event in events:
             builder.begin_list()
             for midx in range(len(event.Muon_eta)):
-                if event.Muon_eta[midx] is None:
-                    builder.null()
-                    continue
                 mindr = 10 # 0.16  # 0.4**2
                 minidx = -1
                 for jidx in range(len(event.Jet_eta)):
@@ -87,7 +75,26 @@ class Muon(Process):
                         mindr = dr
                         minidx = jidx
                 builder.integer(minidx)
-
-
             builder.end_list()
-            i += 1
+
+    v_fullIso = ["Muon_pt", "Muon_eta", "Muon_phi", "Jet_pt", "Jet_eta", "Jet_phi"]
+    @staticmethod
+    @numba.jit(nopython=True)
+    def fullIso(events, builder):
+        I2 = 0.8
+        I3_pow2 = 7.2**2
+        for event in events:
+            builder.begin_list()
+            for midx in range(len(event.Muon_eta)):
+                jidx = event.Muon_closeJetIndex[midx]
+                if event.Muon_pt[midx]/event.Jet_pt[jidx] > I2:
+                    builder.boolean(True)
+                    continue
+                p_jet = event.Jet_pt[jidx]*math.cosh(event.Jet_eta[jidx])
+                p_mu = event.Muon_pt[midx]*math.cosh(event.Muon_eta[midx])
+                cos_dphi = (event.Jet_pt[jidx]*event.Muon_pt[midx]
+                            *math.cos(event.Jet_eta[jidx]-event.Muon_eta[midx]))
+                jetrel = (((p_jet*p_mu)**2 - p_jet*p_mu - cos_dphi)/
+                          (p_jet-p_mu)**2 - cos_dphi)
+                builder.boolean(jetrel > I3_pow2)
+            builder.end_list()

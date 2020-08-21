@@ -12,28 +12,33 @@ class Process:
         self.extraFuncs = list()
         if process is None:
             self.outmasks = dict()
+            self.mask_tree = dict()
         else:
             self.outmasks = process.outmasks
-        self.mask_tree_base = Node("base")
-        self.mask_tree = dict()
+            self.mask_tree = process.mask_tree
 
     def __iadd__(self, other):
         for col in other.outmasks:
             self.outmasks[col] = other.outmasks[col]
+        self.mask_tree.update(other.mask_tree)
+        
         return self
 
     def add_job(self, func, outmask, vals, inmask=None, addvals=None):
         inmask_dict = dict()
-        if isinstance(inmask, dict):
-            for mask, key in inmask.items():
+        if isinstance(inmask, list):
+            for mask in inmask:
+                key = mask.split("_")[0] + "_"
                 var_apply = [col for col in vals if key in col]
                 inmask_dict[mask] = var_apply
                 self.mask_tree[outmask] = Node(outmask, self.mask_tree[mask])
         elif isinstance(inmask, str):
-            inmask_dict[inmask] = vals
+            key = inmask.split("_")[0] + "_"
+            var_apply = [col for col in vals if key in col]
+            inmask_dict[inmask] = var_apply
             self.mask_tree[outmask] = Node(outmask, self.mask_tree[inmask])
         elif inmask is None:
-            self.mask_tree[outmask] = Node(outmask, self.mask_tree_base)
+            self.mask_tree[outmask] = Node(outmask, Node("base"))
         self.outmasks[outmask] = ak.Array([])
 
         self.extraFuncs.append((func, outmask, inmask_dict, vals, addvals))
@@ -43,16 +48,15 @@ class Process:
         start = 0
         for array in uproot.iterate("{}:Events".format(filename), allvars):
             for func, write_name, inmask, var, addvals in self.extraFuncs:
+                print(func)
                 events = array[var]
-                for mask, vals in inmask.items():
-                    print(mask)
+                for mask_name, vals in inmask.items():
+                    mask = self.get_mask(mask_name, start)
                     for col in vals:
-                        events[col] = events[col][self.get_mask(mask, start)]
+                        events[col] = events[col][mask]
 
                 if isinstance(addvals, dict):
                     for addval, mask in addvals.items():
-                        # print(self.add_var(mask, addval, start)[:10].tolist())
-                        # print(events[:10].tolist())
                         events[addval] = self.add_var(mask, addval, start)
 
                 # For different runtypes
@@ -102,10 +106,10 @@ class Process:
         return total_mask
 
     def add_var(self, mask_name, var_name, start):
-        print(self.mask_tree.items())
         variable = self.outmasks[var_name][start:]
         var_parent = self.mask_tree[var_name].parent.name
         work_node = self.mask_tree[mask_name]
+        print(var_parent, print(work_node))
         apply_list = list()
         
         while work_node.parent.name != var_parent:
