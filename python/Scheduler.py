@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 import python.Process as Process
-
+import awkward1 as ak
+import numpy as np
 
 class Scheduler:
     jobs = list()
@@ -16,10 +17,18 @@ class Scheduler:
         Scheduler.jobs.append(class_list)
 
     def run(self):
-        total_process = Process()
+        self.masks = Process()
         for job in Scheduler.jobs:
-            classes = [cls(total_process) for cls in job]
+            classes = [cls(self.masks) for cls in job]
             for cls in classes:
                 cls.run(self.files)
             for process in classes:
-                total_process += process
+                self.masks += process
+                
+    def add_tree(self):
+        total_mask = ak.Array({})
+        for key, arr in self.masks.outmasks.items():
+            print(key)
+            total_mask[key] = arr
+        print(total_mask[:10].tolist())
+        # ak.to_parquet(total_mask, "test/{}.parquet".format(self.group))

@@ -7,18 +7,17 @@ import numba
 
 from python.Process import Process
 
-
-
-
-
 class EventWide(Process):
     def __init__(self, process):
         super().__init__(process)
-        self.extraFuncs = [
-            ("met_filter", "Event_MetFilterMask", None, EventWide.filters),
-            ("pileup_scale", "Event_pileupScale", None, ["Pileup_nTrueInt"]),
-            ("wdecay_scale", "Event_wDecayScale", None, EventWide.gen_vars),
-        ]
+
+        self.add_job("met_filter", outmask = "Event_MetFilterMask",
+                     vals = EventWide.filters)
+        self.add_job("pileup_scale", outmask = "Event_pileupScale",
+                     vals = ["Pileup_nTrueInt"])
+        self.add_job("wdecay_scale", outmask = "Event_wDecayScale",
+                     vals = EventWide.gen_vars)
+
 
     # Numba methods
     # maybe just Flag_MetFilter?

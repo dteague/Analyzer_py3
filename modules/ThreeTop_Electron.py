@@ -4,6 +4,7 @@ import uproot4 as uproot
 import awkward1 as ak
 import numpy as np
 import numba
+import math
 
 from python.Process import Process
 
@@ -11,15 +12,25 @@ class Electron(Process):
     def __init__(self, process):
         super().__init__(process)
 
-        self.extraFuncs = [
-            ("loose_mask", "Electron_looseMask", None, Electron.loose),
-            ("trigger_emu", "Electron_looseMask", "Electron_looseMask", Electron.emu),
-            ("mva_loose_2016", "Electron_looseMask", "Electron_looseMask", Electron.mva_2016),
-            ("fake_mask", "Electron_fakeMask", "Electron_looseMask", Electron.fake),
-            ("closeJet", "Electron_closeJetIndex", {"Electron_": "Electron_fakeMask"}, Electron.close_jet),
-            ("tight_mask", "Electron_tightMask", "Electron_fakeMask", Electron.tight),
-            ("mva_tight_2016", "Electron_tightMask", "Electron_tightMask", Electron.mva_2016),
-        ]
+        self.add_job("loose_mask", outmask = "Electron_looseMask",
+                     vals = Electron.loose)
+        self.add_job("trigger_emu", outmask = "Electron_triggerEmuMask",
+                     inmask = "Electron_looseMask", vals = Electron.emu)
+        self.add_job("mva_loose_2016", outmask = "Electron_looseMvaMask",
+                     inmask = "Electron_triggerEmuMask",  vals = Electron.mva_2016)
+        self.add_job("fake_mask", outmask = "Electron_fakeMask",
+                     inmask = "Electron_looseMvaMask", vals = Electron.fake)
+        self.add_job("closeJet", outmask = "Electron_closeJetIndex",
+                     inmask = {"Electron_fakeMask": "Electron_"},
+                     vals = Electron.close_jet)
+        self.add_job("tight_mask", outmask = "Electron_tightMask",
+                     inmask = "Electron_fakeMask", vals = Electron.tight)
+        self.add_job("mva_tight_2016", outmask = "Electron_tightMVAMask",
+                     inmask = "Electron_tightMask", vals = Electron.mva_2016)
+        self.add_job("fullIso", outmask = "Electron_fullIsoMask",
+                     inmask = {"Electron_tightMVAMask": "Electron_"},
+                     vals = Electron.v_fullIso,
+                     addvals = {"Electron_closeJetIndex": "Electron_tightMVAMask"})
 
     mva_2016 = Process.prefix("Electron", ["pt", "eta", "mvaFall17V2noIso"])
     @staticmethod
@@ -106,7 +117,7 @@ class Electron(Process):
         elif abs(eta) < 1.479: mvaCut = mvaVec[1]
         elif abs(eta) < 2.5:   mvaCut = mvaVec[2]
 
-        return np.arctanh(mva) > mvaCut
+        return math.atanh(mva) > mvaCut
 
     @staticmethod
     @numba.vectorize('b1(f4,f4,f4)')
@@ -121,7 +132,7 @@ class Electron(Process):
         elif abs(eta) < 1.479: mvaCut = mvaVec[1]
         elif abs(eta) < 2.5:   mvaCut = mvaVec[2]
 
-        return np.arctanh(mva) > mvaCut
+        return math.atanh(mva) > mvaCut
 
     # Numba methods
     loose = Process.prefix("Electron", ["pt", "convVeto", "lostHits",
@@ -134,8 +145,8 @@ class Electron(Process):
             convVeto  and
             lostHits <= 1 and
             iso < 0.4 and
-            np.abs(dz) < 0.1 and
-            np.abs(dxy) < 0.05
+            abs(dz) < 0.1 and
+            abs(dxy) < 0.05
            )
 
     emu = Process.prefix("Electron", ["eta", "sieie", "hoe", "eInvMinusPInv"])
@@ -174,20 +185,56 @@ class Electron(Process):
             TkSumPt / pt < 0.2
         )
 
+
     close_jet = ["Electron_eta", "Electron_phi", "Jet_eta", "Jet_phi"]
     @staticmethod
     @numba.jit(nopython=True)
     def closeJet(events, builder):
+        i = 0
         for event in events:
             builder.begin_list()
-            for midx in range(len(event.Electron_eta)):
-                mindr = 0.16  # 4**2
+            for eidx in range(len(event.Electron_eta)):
+                if event.Electron_eta[eidx] is None:
+                    builder.null()
+                    continue
+                mindr = 100
                 minidx = -1
                 for jidx in range(len(event.Jet_eta)):
-                    dr = (event.Electron_eta[midx] - event.Jet_eta[jidx])**2 \
-                        + (event.Electron_phi[midx] - event.Jet_phi[jidx])**2
+                    dr = (event.Electron_eta[eidx] - event.Jet_eta[jidx])**2 \
+                        + (event.Electron_phi[eidx] - event.Jet_phi[jidx])**2
                     if mindr > dr:
                         mindr = dr
                         minidx = jidx
+
                 builder.integer(minidx)
+
+            builder.end_list()
+            i+= 1
+
+    
+    v_fullIso = ["Electron_pt", "Electron_eta", "Electron_phi",
+                 "Jet_pt", "Jet_eta", "Jet_phi"]
+    @staticmethod
+    @numba.jit(nopython=True)
+    def fullIso(events, builder):
+        I2 = 0.8
+        I3_pow2 = 7.2**2
+        for event in events:
+            builder.begin_list()
+            for eidx in range(len(event.Electron_eta)):
+                if event.Electron_eta[eidx] is None:
+                    builder.null()
+                    continue
+                jidx = event.Electron_closeJetIndex[eidx]
+                print(jidx)
+                if event.Electron_pt[eidx]/event.Jet_pt[jidx] > I2:
+                    builder.boolean(True)
+                    continue
+                p_jet = event.Jet_pt[jidx]*math.cosh(event.Jet_eta[jidx])
+                p_elec = event.Electron_pt[eidx]*math.cosh(event.Electron_eta[eidx])
+                cos_dphi = (event.Jet_pt[jidx]*event.Electron_pt[eidx]
+                            *math.cos(event.Jet_eta[jidx]-event.Electron_eta[eidx]))
+                jetrel = (((p_jet*p_elec)**2 - p_jet*p_elec - cos_dphi)/
+                          (p_jet-p_elec)**2 - cos_dphi)
+                builder.boolean(jetrel > I3_pow2)
             builder.end_list()

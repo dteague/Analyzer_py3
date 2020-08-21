@@ -11,12 +11,16 @@ class Muon(Process):
     def __init__(self, process):
         super().__init__(process)
 
-        self.extraFuncs = [
-            ("loose_mask", "Muon_looseMask", None, Muon.loose),
-            ("fake_mask", "Muon_fakeMask", None, Muon.fake),
-            ("closeJet", "Muon_closeJetIndex", {"Muon_": "Muon_fakeMask"}, Muon.close_jet),
-            ("tight_mask", "Muon_tightMask", "Muon_fakeMask", Muon.tight),
-        ]
+        self.add_job("loose_mask", outmask = "Muon_looseMask",
+                     vals = Muon.loose)
+        self.add_job("fake_mask", outmask = "Muon_fakeMask",
+                     inmask = "Muon_looseMask", vals = Muon.fake)
+        self.add_job("setupcloseJet", outmask = "Muon_closeJetIndex",
+                     inmask = {"Muon_fakeMask": "Muon_"},
+                     vals = Muon.close_jet)
+        self.add_job("tight_mask", outmask = "Muon_tightMask",
+                     inmask = "Muon_fakeMask", vals = Muon.tight)
+
 
     # Numba methods
 
@@ -53,7 +57,10 @@ class Muon(Process):
            )
 
     close_jet = ["Muon_eta", "Muon_phi", "Jet_eta", "Jet_phi"]
-    def setup_closeJet(self, events):
+    #close_jet = ["Muon_eta", "Muon_phi"]
+    @staticmethod
+    @numba.jit
+    def setupcloseJet(events):
         #muons = events[["Muon_eta", "Muon_phi"]][self.masks["Muon_fakeableMask"]]
         meta, jeta = ak.unzip(ak.cartesian([events.Muon_eta, events.Jet_eta], nested=True, axis=1))
         mphi, jphi = ak.unzip(ak.cartesian([events.Muon_phi, events.Jet_phi], nested=True, axis=1))
@@ -64,10 +71,14 @@ class Muon(Process):
     @staticmethod
     @numba.jit(nopython=True)
     def closeJet(events, builder):
+        i = 0
         for event in events:
             builder.begin_list()
             for midx in range(len(event.Muon_eta)):
-                mindr = 0.16  # 0.4**2
+                if event.Muon_eta[midx] is None:
+                    builder.null()
+                    continue
+                mindr = 10 # 0.16  # 0.4**2
                 minidx = -1
                 for jidx in range(len(event.Jet_eta)):
                     dr = (event.Muon_eta[midx] - event.Jet_eta[jidx])**2 + \
@@ -76,4 +87,7 @@ class Muon(Process):
                         mindr = dr
                         minidx = jidx
                 builder.integer(minidx)
+
+
             builder.end_list()
+            i += 1

@@ -10,10 +10,12 @@ from python.Process import Process
 class Jet(Process):
     def __init__(self, process):
         super().__init__(process)
-        self.extraFuncs = [("jet_mask", "Jet_jetMask", None, Jet.jet),
-                           ("bjet_mask", "Jet_bjetMask", None, Jet.bjet),
-                           ("calc_HT", "Jet_HT", "Jet_jetMask", Jet.ht)]
-        
+
+        self.add_job("jet_mask", outmask = "Jet_jetMask", vals = Jet.jet)
+        self.add_job("bjet_mask", outmask = "Jet_bjetMask", vals = Jet.bjet)
+        self.add_job("calc_HT", outmask = "Jet_HT", inmask = "Jet_jetMask",
+                     vals = Jet.ht)
+
     # Numba methods
     jet = Process.prefix("Jet", ["pt", "eta", "jetId"])
     @staticmethod
@@ -45,6 +47,8 @@ class Jet(Process):
         for event in events:
             HT = 0
             for j in range(len(event["Jet_pt"])):
+                if event.Jet_pt[j] is None:
+                    continue
                 HT += event.Jet_pt[j]
             builder.real(HT)
 
