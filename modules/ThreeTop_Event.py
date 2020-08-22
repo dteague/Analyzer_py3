@@ -17,7 +17,12 @@ class EventWide(Process):
                      vals = ["Pileup_nTrueInt"])
         self.add_job("wdecay_scale", outmask = "Event_wDecayScale",
                      vals = EventWide.gen_vars)
-
+        self.add_job("set_channel", outmask = "Event_channels",
+                     inmask = ["Electron_finalMask", "Muon_finalMask"],
+                     vals = EventWide.lep_chans)
+        self.add_job("apply_trigger", outmask = "Event_triggerMask",
+                     vals = EventWide.triggers,
+                     addvals = {"Event_channels": None})
 
     # Numba methods
     # maybe just Flag_MetFilter?
@@ -90,7 +95,53 @@ class EventWide(Process):
             nhadW = nW - nlepW
             builder.real(lep_ratio**nlepW * had_ratio**nhadW)
 
+    lep_chans = ["Electron_charge", "Electron_pt", "Muon_charge", "Muon_pt"]
+    @staticmethod
+    @numba.jit(nopython=True)
+    def set_channel(events, builder):
+        for event in events:
+            nLeps = len(event.Electron_charge) + len(event.Muon_charge)
+            if nLeps <= 1:
+                builder.integer(nLeps)
+            else:
+                q1, q2 = 0, 0
+                p1, p2 = 0, 0
+                chan = 10*nLeps
+                if len(event.Electron_pt) > 1:
+                    p2, q2 = event.Electron_pt[1], event.Electron_charge[1]
+                if len(event.Electron_pt) > 0:
+                    p1, q1 = event.Electron_pt[0], event.Electron_charge[0]
+                if len(event.Muon_pt) > 0:
+                    if event.Muon_pt[0] > p1:
+                        p2, q2 = p1, q2
+                        p1, q1 = event.Muon_pt[0], event.Muon_charge[0]
+                        chan += 1
+                    elif event.Muon_pt[0] > p2:
+                        p2, q2 = event.Muon_pt[0], event.Muon_charge[0]
+                        chan += 1
+                if len(event.Muon_pt) > 1:
+                    if event.Muon_pt[1] > p2:
+                        p2, q2 = event.Muon_pt[0], event.Muon_charge[0]
+                        chan += 1
+                builder.integer(chan*q1*q2)
 
+    triggers = Process.prefix("HLT", ["DoubleMu8_Mass8_PFHT300",
+                                      "Mu8_Ele8_CaloIdM_TrackIdM_Mass8_PFHT300",
+                                      "DoubleEle8_CaloIdM_TrackIdM_Mass8_PFHT300",
+                                      "AK8PFJet450", "PFJet450"])
+    @staticmethod
+    @numba.vectorize('b1(b1,b1,b1,b1,b1,i8)')
+    def apply_trigger(mm_trig, em_trig, ee_trig, ak8ht450_trig, ht450_trig, chan):
+        return (
+            (abs(chan) <= 1) or
+            (abs(chan) % 3 == 0 and ee_trig) or
+            (abs(chan) % 3 == 1 and em_trig) or
+            (abs(chan) % 3 == 2 and mm_trig)
+        )
+
+
+
+                    
     # close_jet = ["Muon_eta", "Muon_pt", "Electron_eta", "Electron_pt"]
     # @staticmethod
     # @numba.jit(nopython=True)
@@ -101,11 +152,6 @@ class EventWide(Process):
     #             continue
 
     #         if
-
-
-
-
-
 
             # float triggerScaleFactor(int pdgId1, int pdgId2, float pt1, float pt2, float eta1, float eta2, float ht) {
 #     // return TotalTriggerSF(pdgId1, pt1, eta1, pdgId2, pt2, eta2, ht);

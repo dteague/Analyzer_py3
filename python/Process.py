@@ -58,17 +58,17 @@ class Process:
                 if isinstance(addvals, dict):
                     for addval, mask in addvals.items():
                         events[addval] = self.add_var(mask, addval, start)
+                        var.append(addval)
 
                 # For different runtypes
                 final_mask = None
                 if self.isJit(func):
                     mask = ak.ArrayBuilder()
-                    getattr(self, func)(events,  mask)
+                    getattr(self, func)(events, mask)
                     final_mask = mask.snapshot()
-                    final_mask[:5]
                 elif self.isVectorize(func):
                     variables = [events[col] for col in var]
-                    #print([ak.type(v[0]) for v in variables])
+                    # print([ak.type(v[0]) for v in variables])
                     final_mask = getattr(self, func)(*variables)
                 else:
                     final_mask = getattr(self, func)(events[var])
@@ -107,12 +107,13 @@ class Process:
 
     def add_var(self, mask_name, var_name, start):
         variable = self.outmasks[var_name][start:]
+        if mask_name is None:
+            return variable
         var_parent = self.mask_tree[var_name].parent.name
         work_node = self.mask_tree[mask_name]
-        print(var_parent, print(work_node))
         apply_list = list()
         
-        while work_node.parent.name != var_parent:
+        while work_node.name != var_parent:
             apply_list.append(work_node.name)
             work_node = work_node.parent
 

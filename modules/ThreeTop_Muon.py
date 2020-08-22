@@ -20,7 +20,7 @@ class Muon(Process):
                      inmask = "Muon_fakeMask", vals = Muon.close_jet)
         self.add_job("tight_mask", outmask = "Muon_tightMask",
                      inmask = "Muon_fakeMask", vals = Muon.tight)
-        self.add_job("fullIso", outmask = "Muon_fullIsoMask",
+        self.add_job("fullIso", outmask = "Muon_finalMask",
                      inmask = "Muon_tightMask", vals = Muon.v_fullIso,
                      addvals = {"Muon_closeJetIndex": "Muon_tightMask"})
 

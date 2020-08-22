@@ -14,8 +14,10 @@ class Jet(Process):
         self.add_job("closeJet", outmask="Jet_rmCloseJet", vals = Jet.close_jet,
                      addvals = {"Electron_closeJetIndex": "Electron_fakeMask",
                                 "Muon_closeJetIndex": "Muon_fakeMask"})
-        self.add_job("jet_mask", outmask = "Jet_jetMask", vals = Jet.jet)
-        self.add_job("bjet_mask", outmask = "Jet_bjetMask", vals = Jet.bjet)
+        self.add_job("jet_mask", outmask = "Jet_jetMask",
+                     inmask="Jet_rmCloseJet", vals = Jet.jet)
+        self.add_job("bjet_mask", outmask = "Jet_bjetMask",
+                     inmask="Jet_rmCloseJet", vals = Jet.bjet)
         self.add_job("calc_HT", outmask = "Jet_HT", inmask = "Jet_jetMask",
                      vals = Jet.ht)
 
@@ -25,20 +27,25 @@ class Jet(Process):
     @staticmethod
     @numba.jit(nopython=True)
     def closeJet(events, builder):
-        pass
-        # for event in events:
-        #     builder.begin_list()
-        #     for eidx in range(len(event.Electron_eta)):
-        #         mindr = 10
-        #         minidx = -1
-        #         for jidx in range(len(event.Jet_eta)):
-        #             dr = (event.Electron_eta[eidx] - event.Jet_eta[jidx])**2 \
-        #                 + (event.Electron_phi[eidx] - event.Jet_phi[jidx])**2
-        #             if mindr > dr:
-        #                 mindr = dr
-        #                 minidx = jidx
-        #         builder.integer(minidx)
-        #     builder.end_list()
+        for event in events:
+            builder.begin_list()
+            for jidx in range(len(event.Jet_eta)):
+                dr = 10
+                for eidx in range(len(event.Electron_closeJetIndex)):
+                    if jidx == event.Electron_closeJetIndex[eidx]:
+                        dr = (event.Electron_eta[eidx] - event.Jet_eta[jidx])**2 \
+                            + (event.Electron_phi[eidx] - event.Jet_phi[jidx])**2
+                        break
+                if dr < 0.16:   # 0.4**2
+                    builder.boolean(False)
+                    continue
+                for midx in range(len(event.Muon_closeJetIndex)):
+                    if jidx == event.Muon_closeJetIndex[midx]:
+                        dr = (event.Muon_eta[midx] - event.Jet_eta[jidx])**2 \
+                            + (event.Muon_phi[midx] - event.Jet_phi[jidx])**2
+                        break
+                builder.boolean(dr > 0.16 )
+            builder.end_list()
 
 
 

@@ -26,7 +26,7 @@ class Electron(Process):
                      inmask = "Electron_fakeMask", vals = Electron.tight)
         self.add_job("mva_tight_2016", outmask = "Electron_tightMVAMask",
                      inmask = "Electron_tightMask", vals = Electron.mva_2016)
-        self.add_job("fullIso", outmask = "Electron_fullIsoMask",
+        self.add_job("fullIso", outmask = "Electron_finalMask",
                      inmask = "Electron_tightMVAMask", vals = Electron.v_fullIso,
                      addvals = {"Electron_closeJetIndex": "Electron_tightMVAMask"})
 
