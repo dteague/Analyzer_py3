@@ -3,34 +3,58 @@
 from python.Scheduler import Scheduler
 from modules import Electron, Muon, Jet, EventWide
 from threading import Thread
+from queue import Queue
 import Utilities.FileGetter as fg
 import warnings
 warnings.filterwarnings('ignore')
 
+
+# Scheduler.add_step([Electron])
 Scheduler.add_step([Muon, Electron])
 Scheduler.add_step([Jet])
 Scheduler.add_step([EventWide])
 
+def job_run(job_type, *args):
+    job = Scheduler(*args)
+    if job_type == "create":
+        job.run()
+        job.add_tree()
+    elif job_type == "apply":
+        job.apply_mask()
+    else:
+        print("problem with job")
+
+
+def worker():
+    while True:
+        job_type, group, files, outdir = q.get()
+        job_run(job_type, group, files, outdir)
+        q.task_done()
+
+
 if __name__ == "__main__":
-    info = fg.FileGetter("ThreeLep", "TwoLep_Met25")
+    args = fg.get_generic_args()
 
-    #files_dict = info.get_file_dict(["xg"])
-    files_dict = info.get_file_dict("ttg_lepfromTbar")
+    info = fg.FileGetter(args.analysis, args.selection)
+    files_dict = info.get_file_dict(args.filenames)
+    fg.checkOrCreateDir(args.outdir)
 
-    jobs = list()
-
+    argList = list()
     for group, files in files_dict.items():
-        print(group)
-        schedule = Scheduler(group, files)
-        schedule.run()
-        jobs.append((0, schedule))
+        argList.append((args.proc_type, group, files, args.outdir))
 
-        # job = Thread(target=schedule.run)
-        # jobs.append((job, schedule))
-        # job.start()
+    if args.j == 1:
+        for arg in argList:
+            job_run(arg[0], *arg[1:])
+    else:
+        q = Queue()
+        for _ in range(args.j):
+            t = Thread(target=worker)
+            t.daemon = True
+            t.start()
+        for arg in argList:
+            q.put(arg)
 
-    # for job, _ in jobs:
-    #     job.join()
-    
-    for _, sched in jobs:
-            sched.add_tree()
+        q.join()       # block until all tasks are done
+
+

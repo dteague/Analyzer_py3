@@ -18,13 +18,17 @@ class Process:
             self.mask_tree = process.mask_tree
 
     def __iadd__(self, other):
-        for col in other.outmasks:
-            self.outmasks[col] = other.outmasks[col]
-        self.mask_tree.update(other.mask_tree)
+        if isinstance(other, Process):
+            for col in other.outmasks:
+                self.outmasks[col] = other.outmasks[col]
+            self.mask_tree.update(other.mask_tree)
+        else:
+            for col in other.columns:
+                self.outmasks[col] = other[col]
         
         return self
 
-    def add_job(self, func, outmask, vals, inmask=None, addvals=None):
+    def add_job(self, func, outmask, vals, inmask=None, addvals={}):
         inmask_dict = dict()
         if isinstance(inmask, list):
             for mask in inmask:
@@ -45,20 +49,18 @@ class Process:
 
     def run(self, filename):
         allvars = self.get_all_vars()
-        start = 0
+        start, end = 0, 0
         for array in uproot.iterate("{}:Events".format(filename), allvars):
+            end += len(array)
             for func, write_name, inmask, var, addvals in self.extraFuncs:
-                print(func)
                 events = array[var]
                 for mask_name, vals in inmask.items():
-                    mask = self.get_mask(mask_name, start)
+                    mask = self.get_mask(mask_name, start, end)
                     for col in vals:
                         events[col] = events[col][mask]
-
-                if isinstance(addvals, dict):
-                    for addval, mask in addvals.items():
-                        events[addval] = self.add_var(mask, addval, start)
-                        var.append(addval)
+                        
+                for addval, mask in addvals.items():
+                    events[addval] = self.add_var(mask, addval, start, end)
 
                 # For different runtypes
                 final_mask = None
@@ -67,7 +69,7 @@ class Process:
                     getattr(self, func)(events, mask)
                     final_mask = mask.snapshot()
                 elif self.isVectorize(func):
-                    variables = [events[col] for col in var]
+                    variables = [events[col] for col in var+list(addvals.keys())]
                     # print([ak.type(v[0]) for v in variables])
                     final_mask = getattr(self, func)(*variables)
                 else:
@@ -76,7 +78,7 @@ class Process:
                 self.outmasks[write_name] = ak.concatenate(
                     [self.outmasks[write_name], final_mask])
                                 
-            start += len(array)
+            start = end
             
     def get_all_vars(self):
         return_set = set()
@@ -94,19 +96,19 @@ class Process:
     def isVectorize(self, funcName):
         return "DUFunc" in repr(getattr(self, funcName))
 
-    def get_mask(self, mask_name, start):
+    def get_mask(self, mask_name, start, end):
         apply_list = list()
         node = self.mask_tree[mask_name]
         while node.name != "base":
             apply_list.append(node.name)
             node = node.parent
-        total_mask = self.outmasks[apply_list.pop()][start:]
+        total_mask = self.outmasks[apply_list.pop()][start:end]
         for m_name in apply_list[::-1]:
-            total_mask = total_mask[self.outmasks[m_name][start:]]
+            total_mask = total_mask[self.outmasks[m_name][start:end]]
         return total_mask
 
-    def add_var(self, mask_name, var_name, start):
-        variable = self.outmasks[var_name][start:]
+    def add_var(self, mask_name, var_name, start, end):
+        variable = self.outmasks[var_name][start:end]
         if mask_name is None:
             return variable
         var_parent = self.mask_tree[var_name].parent.name
@@ -116,7 +118,7 @@ class Process:
         while work_node.name != var_parent:
             apply_list.append(work_node.name)
             work_node = work_node.parent
-
+            
         for m_name in apply_list[::-1]:
-            variable = variable[self.outmasks[m_name][start:]]
+            variable = variable[self.outmasks[m_name][start:end]]
         return variable
