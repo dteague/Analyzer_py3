@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from python.Scheduler import Scheduler
+from python.CutApplier import CutApplier
 from modules import Electron, Muon, Jet, EventWide
 from threading import Thread
 from queue import Queue
@@ -8,11 +9,19 @@ import Utilities.FileGetter as fg
 import warnings
 warnings.filterwarnings('ignore')
 
-
-# Scheduler.add_step([Electron])
+# Run Specifics
 Scheduler.add_step([Muon, Electron])
 Scheduler.add_step([Jet])
 Scheduler.add_step([EventWide])
+
+# Applying specifics
+CutApplier.add_scale_factor("Event_wDecayScale")
+CutApplier.add_scale_factor("Event_pileupScale")
+CutApplier.add_cut("Event_MetFilterMask")
+CutApplier.add_cut("Event_triggerMask")
+CutApplier.add_cut("abs(Event_channels) > 1")
+CutApplier.add_vars(["Muon_pt"])
+
 
 def job_run(job_type, *args):
     job = Scheduler(*args)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import python.Process as Process
+from python.CutApplier import CutApplier
 import awkward1 as ak
 import numpy as np
 
@@ -39,10 +40,8 @@ class Scheduler:
         print("{}: Finished Write".format(self.group))
 
     def apply_mask(self):
-        self.process += ak.from_parquet("{}/{}.parquet".format(self.out_dir, self.group))
-
-        "Event_MetFilterMask"
-        "Event_pileupScale"
-        "Event_wDecayScale"
-        "Event_triggerMask"
-        "Event_channels"
+        print("{}: Starting Apply".format(self.group))
+        cut_apply = CutApplier(ak.from_parquet(
+            "{}/{}.parquet".format(self.out_dir, self.group)))
+        cut_apply.run(self.files)
+        print("{}: Finished Apply".format(self.group))
