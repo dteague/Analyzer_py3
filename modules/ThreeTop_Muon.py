@@ -7,6 +7,7 @@ import numba
 import math
 
 from python.Process import Process
+from Utilities.FileGetter import pre
 
 class Muon(Process):
     def __init__(self, process):
@@ -27,8 +28,8 @@ class Muon(Process):
 
     # Numba methods
 
-    loose = Process.prefix("Muon", ["pt", "isGlobal", "isTracker", "isPFcand",
-                                'miniPFRelIso_all', 'dxy', 'dz'])
+    loose = pre("Muon", ["pt", "isGlobal", "isTracker", "isPFcand",
+                         'miniPFRelIso_all', 'dxy', 'dz'])
     @staticmethod
     @numba.vectorize('b1(f4,b1,b1,b1,f4,f4,f4)')
     def loose_mask(pt, isGlobal, isTracker, isPFcand, iso, dz, dxy):
@@ -40,7 +41,7 @@ class Muon(Process):
            abs(dz) < 0.05
            )
 
-    fake = Process.prefix("Muon", [ "tightCharge", "mediumId", "sip3d"])
+    fake = pre("Muon", ["tightCharge", "mediumId", "sip3d"])
     @staticmethod
     @numba.vectorize('b1(i4,b1,f4)')
     def fake_mask(tightCharge, mediumId, sip3d):
@@ -50,7 +51,7 @@ class Muon(Process):
             sip3d < 4
            )
 
-    tight = Process.prefix("Muon", ["pt", 'miniPFRelIso_all'])
+    tight = pre("Muon", ["pt", 'miniPFRelIso_all'])
     @staticmethod
     @numba.vectorize('b1(f4,f4)')
     def tight_mask(pt, iso):
@@ -77,11 +78,11 @@ class Muon(Process):
                 builder.integer(minidx)
             builder.end_list()
 
-    v_fullIso = ["Muon_pt", "Muon_eta", "Muon_phi", "Jet_pt", "Jet_eta", "Jet_phi"]
+    v_fullIso = pre("Muon", ["pt", "eta", "phi"]) + pre("Jet", ["pt", "eta", "phi"])
     @staticmethod
     @numba.jit(nopython=True)
     def fullIso(events, builder):
-        I2 = 0.8
+        I2 = 0.72
         I3_pow2 = 7.2**2
         for event in events:
             builder.begin_list()

@@ -96,3 +96,6 @@ def get_generic_args():
 def checkOrCreateDir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
+def pre(pre, lister):
+    return ["_".join([pre, l]) for l in lister]

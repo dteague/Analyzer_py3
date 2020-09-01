@@ -6,6 +6,7 @@ import numpy as np
 import numba
 
 from python.Process import Process
+from Utilities.FileGetter import pre
 
 class Jet(Process):
     def __init__(self, process):
@@ -18,8 +19,6 @@ class Jet(Process):
                      inmask="Jet_rmCloseJet", vals = Jet.jet)
         self.add_job("bjet_mask", outmask = "Jet_bjetMask",
                      inmask="Jet_rmCloseJet", vals = Jet.bjet)
-        self.add_job("calc_HT", outmask = "Jet_HT", inmask = "Jet_jetMask",
-                     vals = Jet.ht)
 
     # Numba methods
     close_jet = ["Muon_eta", "Muon_phi", "Jet_eta", "Jet_phi",
@@ -49,7 +48,7 @@ class Jet(Process):
 
 
 
-    jet = Process.prefix("Jet", ["pt", "eta", "jetId"])
+    jet = pre("Jet", ["pt", "eta", "jetId"])
     @staticmethod
     @numba.vectorize('b1(f4,f4,i4)')
     def jet_mask(pt, eta, jetId):
@@ -60,27 +59,17 @@ class Jet(Process):
             (jetId & jetId_key) != 0
         )
                                                             
-    bjet = Process.prefix("Jet", ["pt", "eta", "jetId", "btagDeepB"])
+    bjet = pre("Jet", ["pt", "eta", "jetId", "btagDeepB"])
     @staticmethod
     @numba.vectorize('b1(f4,f4,i4,f4)')
     def bjet_mask(pt, eta, jetId, btag):
         jetId_key = 0b11
+        btag_cut = 0.6324 # 2016
+        # btag_cut = 0.4941 # 2017
+        # btag_cut = 0.4184 # 2018
         return (
             pt > 25 and
             np.abs(eta) < 2.4 and
             (jetId & jetId_key) != 0 and
-            btag > 0.6324
+            btag > btag_cut
         )
-
-    ht = ["Jet_pt"]
-    @staticmethod
-    @numba.jit(nopython=True)
-    def calc_HT(events, builder):
-        for event in events:
-            HT = 0
-            for j in range(len(event["Jet_pt"])):
-                if event.Jet_pt[j] is None:
-                    continue
-                HT += event.Jet_pt[j]
-            builder.real(HT)
-

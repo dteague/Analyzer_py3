@@ -85,10 +85,6 @@ class Process:
         for _, _, _, var_list, _ in self.extraFuncs:
             return_set |= set(var_list)
         return list(return_set)
-
-    @staticmethod
-    def prefix(pre, lister):
-        return ["_".join([pre, l]) for l in lister]
     
     def isJit(self, funcName):
         return "Dispatcher" in repr(getattr(self, funcName))

@@ -45,3 +45,11 @@ class Scheduler:
             "{}/{}.parquet".format(self.out_dir, self.group)))
         cut_apply.run(self.files)
         print("{}: Finished Apply".format(self.group))
+        # write
+        print("{}: Starting Write".format(self.group))
+        total_mask = ak.Array({})
+        for key, arr in cut_apply.output.items():
+            for col in arr.columns:
+                total_mask["{}/{}".format(key,col)] = arr[col]
+        ak.to_parquet(total_mask, "{}/{}_cut.parquet".format(self.out_dir, self.group))
+        print("{}: Finished Write".format(self.group))
