@@ -15,6 +15,8 @@ class Electron(Process):
 
         self.add_job("loose_mask", outmask = "Electron_looseMask",
                      vals = Electron.loose)
+        self.add_job("looseIdx", outmask = "Electron_looseIndex",
+                     vals = ["Electron_pt"])
         self.add_job("trigger_emu", outmask = "Electron_triggerEmuMask",
                      inmask = "Electron_looseMask", vals = Electron.emu)
         self.add_job("mva_loose_2016", outmask = "Electron_looseMvaMask",
@@ -32,6 +34,9 @@ class Electron(Process):
         self.add_job("fullIso", outmask = "Electron_finalMask",
                      inmask = "Electron_tightMVAMask", vals = Electron.v_fullIso,
                      addvals = {"Electron_closeJetIndex": "Electron_tightMVAMask"})
+        self.add_job("pass_zveto", outmask = "Electron_ZVeto",
+                     inmask = "Electron_looseMask", vals = Electron.elec_part,
+                     addvals = {"Electron_looseIndex": "Electron_finalMask"})
 
     mva =  pre("Electron", ["pt", "eCorr", "eta"])
     mva_2016 = ["Electron_mvaSpring16GP"]
@@ -187,6 +192,14 @@ class Electron(Process):
             TkSumPt / pt < 0.2
         )
 
+    @staticmethod
+    @numba.jit(nopython=True)
+    def looseIdx(events, builder):
+        for event in events:
+            builder.begin_list()
+            for eidx in range(len(event.Electron_pt)):
+                builder.integer(eidx)
+            builder.end_list()
 
     close_jet = ["Electron_eta", "Electron_phi", "Jet_eta", "Jet_phi"]
     @staticmethod
@@ -208,8 +221,8 @@ class Electron(Process):
 
 
     
-    v_fullIso = ["Electron_pt", "Electron_eCorr", "Electron_eta", "Electron_phi",
-                 "Jet_pt", "Jet_eta", "Jet_phi"]
+    v_fullIso = pre("Electron", ["pt", "eCorr", "eta", "phi"]) + \
+        ["Jet_pt", "Jet_eta", "Jet_phi"]
     @staticmethod
     @numba.jit(nopython=True)
     def fullIso(events, builder):
@@ -231,3 +244,27 @@ class Electron(Process):
                           (p_jet-p_elec)**2 - cos_dphi)
                 builder.boolean(jetrel > I3_pow2)
             builder.end_list()
+
+    elec_part = pre("Electron", ["pt", "eCorr", "eta", "phi", "charge"])
+    @staticmethod
+    @numba.jit(nopython=True)
+    def pass_zveto(events, builder):
+        for event in events:
+            passed = True
+            for i in range(len(event.Electron_pt)):
+                for j in range(i+1, len(event.Electron_pt)):
+                    if event.Electron_charge[i]*event.Electron_charge[j] > 0:
+                        continue
+                    ptval = 2*event.Electron_pt[i]*event.Electron_pt[j] \
+                        /(event.Electron_eCorr[i]*event.Electron_eCorr[j])
+                    mass = ptval*(math.cosh(event.Electron_eta[i] - event.Electron_eta[j])
+                                  - math.cos(event.Electron_phi[i] - event.Electron_phi[j]))
+                    if mass < 12 or abs(mass - 91.188) < 15:
+                        for k in event.Electron_looseIndex:
+                            if i == k or j == k:
+                                passed = False
+                    if not passed:
+                        break
+                if not passed:
+                    break
+            builder.boolean(passed)

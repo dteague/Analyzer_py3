@@ -12,26 +12,31 @@ class CutApplier:
     der_var_list = list()
     def __init__(self, arrays):
         self.arrays = arrays
-        self.cuts = ak.Array([True]*len(arrays))
+        self.cuts = np.ones(len(arrays), dtype=bool)
         self.all_vars = set()
-
+        
+        cuts = list()
         for cut_name in CutApplier.cut_list:
-            full_cut_name = cut_name.replace("Event", "arrays.Event")
-            self.cuts = eval("self.cuts and {}".format(full_cut_name))
-
+            for rep in ["Event", "Jet", "Electron", "Muon"]:
+                cut_name = cut_name.replace(rep, "arrays."+rep)
+            cuts.append(eval("ak.to_numpy({})".format(cut_name)))
+        self.cuts = np.all(cuts, axis=0)
+        
         self.output = dict()
         # self.output = {"scale_factor": ak.Array([1.]*len(arrays[self.cuts]))}
         # for scale_name in CutApplier.sf_list:
         #     self.output["scale_factor"] = (self.output["scale_factor"]
         #                                    * arrays[scale_name][self.cuts])
         for group, add_vars, _ in CutApplier.var_list:
-            self.output[group] = ak.Array({})
+            for var in add_vars:
+                self.output["{}/{}".format(group, var)] = ak.Array([])
             self.all_vars |= set(add_vars)
             
         for group, add_vars in CutApplier.der_var_list:
-            self.output[group] = ak.Array({})
             for var in add_vars:
-                self.output[group][var] = self.arrays[var][self.cuts]
+                self.output["{}/{}".format(group, var)] = self.arrays[var][self.cuts]
+
+        print(ak.count_nonzero(self.cuts))
 
     @staticmethod
     def add_scale_factor(scale_name):
@@ -51,7 +56,8 @@ class CutApplier:
 
     def run(self, filename):
         start, end = 0, 0
-        for array in uproot.iterate("{}:Events".format(filename), self.all_vars):
+        allvars = list(self.all_vars)
+        for array in uproot.iterate("{}:Events".format(filename), allvars):
             end += len(array)
             mask = self.cuts[start:end]
             for group, add_vars, mask_name in CutApplier.var_list:
@@ -60,11 +66,26 @@ class CutApplier:
                     subarray = array[add_vars][submask]
                     subarray = subarray[mask]
                 else:
-                    subarray = array[mask]
-                
-                if len(self.output[group]) == 0:
-                    self.output[group] = subarray
-                else:
-                    self.output[group] = ak.concatenate([self.output[group], subarray])
-
+                    subarray = array[add_vars][mask]
+                    
+                for var in add_vars:
+                    dict_name = "{}/{}".format(group, var)
+                    if "var" in repr(ak.type(subarray[var])):
+                        awk_var = ak.ArrayBuilder()
+                        CutApplier.unMask(subarray[var], awk_var)
+                        var_arr = awk_var.snapshot()
+                    else:
+                        var_arr = subarray[var]
+                        
+                    self.output[dict_name] = ak.concatenate(
+                        [self.output[dict_name], var_arr])
             start = end
+
+    @staticmethod
+    @numba.jit(nopython=True)
+    def unMask(events, builder):
+        for event in events:
+            builder.begin_list()
+            for i in range(len(event)):
+                builder.real(event[i])
+            builder.end_list()

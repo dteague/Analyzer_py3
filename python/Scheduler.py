@@ -36,7 +36,9 @@ class Scheduler:
         total_mask = ak.Array({})
         for key, arr in self.process.outmasks.items():
             total_mask[key] = arr
-        ak.to_parquet(total_mask, "{}/{}.parquet".format(self.out_dir, self.group))
+        print(ak.type(total_mask))
+        ak.to_parquet(total_mask, "{}/{}.parquet".format(self.out_dir, self.group),
+                      compression="gzip")
         print("{}: Finished Write".format(self.group))
 
     def apply_mask(self):
@@ -49,7 +51,8 @@ class Scheduler:
         print("{}: Starting Write".format(self.group))
         total_mask = ak.Array({})
         for key, arr in cut_apply.output.items():
-            for col in arr.columns:
-                total_mask["{}/{}".format(key,col)] = arr[col]
-        ak.to_parquet(total_mask, "{}/{}_cut.parquet".format(self.out_dir, self.group))
+            total_mask[key] = arr
+        print(ak.type(total_mask))
+        ak.to_parquet(total_mask, "{}/{}_cut.parquet".format(self.out_dir, self.group),
+                      compression="gzip")
         print("{}: Finished Write".format(self.group))

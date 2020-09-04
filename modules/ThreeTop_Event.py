@@ -32,7 +32,7 @@ class EventWide(Process):
                      addvals = {"Event_HT": None})
         self.add_job("calc_sphericity", outmask = "Event_sphericity",
                      inmask = "Jet_jetMask", vals = EventWide.sphericity)
-        
+
     # Numba methods
     # maybe just Flag_MetFilter?
     filters = pre("Flag",["goodVertices", "globalSuperTightHalo2016Filter",
@@ -121,15 +121,15 @@ class EventWide(Process):
                     p1, q1 = event.Electron_pt[0], event.Electron_charge[0]
                 if len(event.Muon_pt) > 0:
                     if event.Muon_pt[0] > p1:
-                        p2, q2 = p1, q2
+                        p2, q2 = p1, q1
                         p1, q1 = event.Muon_pt[0], event.Muon_charge[0]
-                        chan += 1
+                        chan += 2
                     elif event.Muon_pt[0] > p2:
                         p2, q2 = event.Muon_pt[0], event.Muon_charge[0]
                         chan += 1
                 if len(event.Muon_pt) > 1:
                     if event.Muon_pt[1] > p2:
-                        p2, q2 = event.Muon_pt[0], event.Muon_charge[0]
+                        p2, q2 = event.Muon_pt[1], event.Muon_charge[1]
                         chan += 1
                 builder.integer(chan*q1*q2)
 
@@ -143,8 +143,8 @@ class EventWide(Process):
         return (
             (abs(chan) <= 1) or
             ((abs(chan) % 3 == 0 and ee_trig) or
-            (abs(chan) % 3 == 1 and em_trig) or
-            (abs(chan) % 3 == 2 and mm_trig)) or
+            ((abs(chan) % 3 == 1 or abs(chan) % 3 == 2) and em_trig) or
+            (abs(chan) % 3 == 3 and mm_trig)) or
             (ht450_trig or ak8ht450_trig)
         )
     
@@ -187,8 +187,7 @@ class EventWide(Process):
             eig, _ = np.linalg.eig(sphere)
             builder.real(3/2*(1-max(eig)))
 
-
-
+    
     # close_jet = ["Muon_eta", "Muon_pt", "Electron_eta", "Electron_pt"]
     # @staticmethod
     # @numba.jit(nopython=True)

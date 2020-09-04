@@ -15,6 +15,8 @@ class Muon(Process):
 
         self.add_job("loose_mask", outmask = "Muon_looseMask",
                      vals = Muon.loose)
+        self.add_job("looseIdx", outmask = "Muon_looseIndex",
+                     vals = ["Muon_pt"])
         self.add_job("fake_mask", outmask = "Muon_fakeMask",
                      inmask = "Muon_looseMask", vals = Muon.fake)
         self.add_job("closeJet", outmask = "Muon_closeJetIndex",
@@ -24,7 +26,9 @@ class Muon(Process):
         self.add_job("fullIso", outmask = "Muon_finalMask",
                      inmask = "Muon_tightMask", vals = Muon.v_fullIso,
                      addvals = {"Muon_closeJetIndex": "Muon_tightMask"})
-
+        self.add_job("pass_zveto", outmask = "Muon_ZVeto",
+                     inmask = "Muon_looseMask", vals = Muon.muon_part,
+                     addvals = {"Muon_looseIndex": "Muon_finalMask"})
 
     # Numba methods
 
@@ -59,6 +63,15 @@ class Muon(Process):
             pt > 20 and
             iso < 0.16
            )
+    
+    @staticmethod
+    @numba.jit(nopython=True)
+    def looseIdx(events, builder):
+        for event in events:
+            builder.begin_list()
+            for midx in range(len(event.Muon_pt)):
+                builder.integer(midx)
+            builder.end_list()
 
     close_jet = ["Muon_eta", "Muon_phi", "Jet_eta", "Jet_phi"]
     @staticmethod
@@ -99,3 +112,26 @@ class Muon(Process):
                           (p_jet-p_mu)**2 - cos_dphi)
                 builder.boolean(jetrel > I3_pow2)
             builder.end_list()
+
+    muon_part = pre("Muon", ["pt", "eta", "phi", "charge"])
+    @staticmethod
+    @numba.jit(nopython=True)
+    def pass_zveto(events, builder):
+        for event in events:
+            passed = True
+            for i in range(len(event.Muon_pt)):
+                for j in range(i+1, len(event.Muon_pt)):
+                    if event.Muon_charge[i]*event.Muon_charge[j] > 0:
+                        continue
+                    ptval = 2*event.Muon_pt[i]*event.Muon_pt[j]
+                    mass = ptval*(math.cosh(event.Muon_eta[i] - event.Muon_eta[j])
+                                  - math.cos(event.Muon_phi[i] - event.Muon_phi[j]))
+                    if mass < 12 or abs(mass - 91.188) < 15:
+                        for k in event.Muon_looseIndex:
+                            if i == k or j == k:
+                                passed = False
+                    if not passed:
+                        break
+                if not passed:
+                    break
+            builder.boolean(passed)
