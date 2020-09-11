@@ -18,6 +18,10 @@ def job_run(job_type, *args):
         job.add_tree()
     elif job_type == "apply":
         job.apply_mask()
+    elif job_type == "all":
+        job.run()
+        job.add_tree()
+        job.apply_mask()
     else:
         print("problem with job")
 
