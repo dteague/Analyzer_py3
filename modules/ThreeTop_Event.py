@@ -32,7 +32,8 @@ class EventWide(Process):
                      addvals = {"Event_HT": None})
         self.add_job("calc_sphericity", outmask = "Event_sphericity",
                      inmask = "Jet_jetMask", vals = EventWide.sphericity)
-
+        self.add_job("save_var", outmask = "Event_MET",
+                     vals = ["MET_pt"])
     # Numba methods
     # maybe just Flag_MetFilter?
     filters = pre("Flag",["goodVertices", "globalSuperTightHalo2016Filter",
@@ -187,7 +188,10 @@ class EventWide(Process):
             eig, _ = np.linalg.eig(sphere)
             builder.real(3/2*(1-max(eig)))
 
-    
+    @staticmethod
+    @numba.vectorize("f4(f4)")
+    def save_var(var):
+        return var
     # close_jet = ["Muon_eta", "Muon_pt", "Electron_eta", "Electron_pt"]
     # @staticmethod
     # @numba.jit(nopython=True)
