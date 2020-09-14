@@ -52,12 +52,14 @@ class Process:
         start, end = 0, 0
         for array in uproot.iterate("{}:Events".format(filename), allvars):
             end += len(array)
+            print("Events considered: ", end)
             for func, write_name, inmask, var, addvals in self.extraFuncs:
                 events = array[var]
                 for mask_name, vals in inmask.items():
-                    mask = self.get_mask(mask_name, start, end)
-                    for col in vals:
-                        events[col] = events[col][mask]
+                    submasks = self.get_masks(mask_name, start, end)
+                    for submask in submasks:
+                        for col in vals:
+                            events[col] = events[col][self.outmasks[submask][start:end]]
                         
                 for addval, mask in addvals.items():
                     events[addval] = self.add_var(mask, addval, start, end)
@@ -92,16 +94,20 @@ class Process:
     def isVectorize(self, funcName):
         return "DUFunc" in repr(getattr(self, funcName))
 
-    def get_mask(self, mask_name, start, end):
+    def get_masks(self, mask_name, start, end):
         apply_list = list()
         node = self.mask_tree[mask_name]
         while node.name != "base":
             apply_list.append(node.name)
             node = node.parent
-        total_mask = self.outmasks[apply_list.pop()][start:end]
-        for m_name in apply_list[::-1]:
-            total_mask = total_mask[self.outmasks[m_name][start:end]]
-        return total_mask
+        return apply_list[::-1]
+        # total_mask = self.outmasks[apply_list.pop()][start:end]
+
+        # for m_name in apply_list[::-1]:
+        #     total_mask = total_mask[self.outmasks[m_name][start:end]]
+        #     print(self.outmasks[m_name][start:start+4].tolist())
+
+        # return total_mask
 
     def add_var(self, mask_name, var_name, start, end):
         variable = self.outmasks[var_name][start:end]
