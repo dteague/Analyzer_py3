@@ -32,7 +32,7 @@ class Electron(Process):
                      inmask = "Electron_basicFakeMask", vals = Electron.close_jet)
         self.add_job("fullIso", outmask = "Electron_fakeMask",
                      inmask = "Electron_basicFakeMask", vals = Electron.v_fullIso,
-                     addvals = {"Electron_closeJetIndex": None})
+                     addvals = [(None, "Electron_closeJetIndex")])
 
         self.add_job("tight_mask", outmask = "Electron_basicTightMask",
                      inmask = "Electron_fakeMask", vals = Electron.tight)
@@ -42,7 +42,14 @@ class Electron(Process):
 
         self.add_job("pass_zveto", outmask = "Electron_ZVeto",
                      inmask = "Electron_looseMask", vals = Electron.elec_part,
-                     addvals = {"Electron_looseIndex": "Electron_finalMask"})
+                     addvals = [("Electron_finalMask", "Electron_looseIndex")])
+
+        self.add_job("lep_lowHT_sf", outmask = "Electron_lowHTScale",
+                     inmask = "Electron_looseMask", vals = Electron.mva)
+        self.add_job("lep_highHT_sf", outmask = "Electron_highHTScale",
+                     inmask = "Electron_looseMask", vals = Electron.mva)
+        self.add_job("lep_GSF_sf", outmask = "Electron_GSFScale",
+                     inmask = "Electron_looseMask", vals = ["Electron_eta"])
 
     
     mva =  pre("Electron", ["pt", "eCorr", "eta"])
@@ -249,7 +256,7 @@ class Electron(Process):
             for eidx in range(len(event.Electron_eta)):
                 jidx = int(event.Electron_closeJetIndex[eidx][0])
                 pt = event.Electron_pt[eidx] / event.Electron_eCorr[eidx]
-                if pt/event.Jet_pt[jidx] > I2:
+                if jidx < 0 or pt/event.Jet_pt[jidx] > I2:
                     builder.boolean(True)
                     continue
                 jetrel = jetRel(pt, event.Electron_eta[eidx],
@@ -279,3 +286,44 @@ class Electron(Process):
                 if not passed:
                     break
             builder.boolean(passed)
+
+    @staticmethod
+    @numba.vectorize('f4(f4,f4,f4)')
+    def lep_lowHT_sf(pt, eCorr, eta):
+        pt_cor = pt/eCorr
+        sf = np.array([[0.9149, 0.9768, 1.0781, 0.9169, 1.1100],
+                       [0.9170, 0.9497, 0.9687, 0.9356, 0.9894 ],
+                       [0.9208, 0.9483, 0.9923, 0.9438, 0.9781],
+                       [0.9202, 0.9514, 0.9827, 0.9480, 0.9627],
+                       [0.9207, 0.9481, 0.9848, 0.9480, 0.9477],
+                       [0.9472, 0.9333, 0.9934, 0.9383, 0.9597]])
+        pt_edges = np.array([20, 30, 40, 50, 100, 14000])
+        eta_edges = np.array([0.8, 1.442, 1.566, 2., 2.5])
+        return sf[np.argmax(pt_cor <= pt_edges), np.argmax(abs(eta) <= eta_edges)]
+    
+    @staticmethod
+    @numba.vectorize('f4(f4,f4,f4)')
+    def lep_highHT_sf(pt, eCorr, eta):
+        pt_cor = pt/eCorr
+        sf = np.array([[0.9158, 0.9820, 1.0756, 0.9203, 1.1124],
+                       [0.9177, 0.9499, 0.9710, 0.9370, 0.9904],
+                       [0.9210, 0.9472, 0.9927, 0.9443, 0.9785],
+                       [0.9213, 0.9515, 0.9830, 0.9480, 0.9628],
+                       [0.9212, 0.9483, 0.9845, 0.9480, 0.9483],
+                       [0.9469, 0.9429, 0.9932, 0.9455, 0.9592]])
+        pt_edges = np.array([20, 30, 40, 50, 100, 14000])
+        eta_edges = np.array([0.8, 1.442, 1.566, 2., 2.5])
+        return sf[np.argmax(pt_cor <= pt_edges), np.argmax(abs(eta) <= eta_edges)]
+
+    @staticmethod
+    @numba.vectorize('f4(f4)')
+    def lep_GSF_sf(eta):
+        sf = np.array([1.1703, 1.0085, 1.0105, 1.0052, 0.9979, 0.9917, 0.9865,
+                       0.9616, 0.9867, 0.9775, 0.9694, 0.9664, 0.9633, 0.9600,
+                       0.9662, 0.9796, 0.9766, 0.9807, 0.9867, 0.9867, 0.9707,
+                       0.9897, 0.9959, 0.9897, 0.9949, 0.9928, 0.9666, 0.8840])
+        eta_edges = np.array([-2.4, -2.3, -2.2, -2.0, -1.8, -1.63, -1.566,
+                              -1.444, -1.2, -1.0, -0.6, -0.4, -0.2, 0.0, 0.2,
+                              0.4, 0.6, 1.0, 1.2, 1.444, 1.566, 1.63, 1.8, 2.0,
+                              2.2, 2.3, 2.4, 2.5])
+        return sf[np.argmax(eta <= eta_edges)]

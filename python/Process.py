@@ -5,7 +5,7 @@ import awkward1 as ak
 import numpy as np
 import numba
 from anytree import Node
-
+from collections import OrderedDict
 
 class Process:
     def __init__(self, process = None):
@@ -28,7 +28,7 @@ class Process:
         
         return self
 
-    def add_job(self, func, outmask, vals, inmask=None, addvals={}):
+    def add_job(self, func, outmask, vals=[], inmask=None, addvals=[]):
         inmask_dict = dict()
         if isinstance(inmask, list):
             for mask in inmask:
@@ -44,8 +44,15 @@ class Process:
         elif inmask is None:
             self.mask_tree[outmask] = Node(outmask, Node("base"))
         self.outmasks[outmask] = ak.Array([])
+        addvals_dict = OrderedDict()
+        for mask, additions in addvals:
+            if isinstance(additions, str):
+                addvals_dict[additions] = mask
+            else:
+                for add in additions:
+                    addvals_dict[add] = mask
 
-        self.extraFuncs.append((func, outmask, inmask_dict, vals, addvals))
+        self.extraFuncs.append((func, outmask, inmask_dict, vals, addvals_dict))
 
     def run(self, filename):
         allvars = self.get_all_vars()
@@ -60,7 +67,7 @@ class Process:
                     for submask in submasks:
                         for col in vals:
                             events[col] = events[col][self.outmasks[submask][start:end]]
-                        
+                
                 for addval, mask in addvals.items():
                     events[addval] = self.add_var(mask, addval, start, end)
 
@@ -101,13 +108,6 @@ class Process:
             apply_list.append(node.name)
             node = node.parent
         return apply_list[::-1]
-        # total_mask = self.outmasks[apply_list.pop()][start:end]
-
-        # for m_name in apply_list[::-1]:
-        #     total_mask = total_mask[self.outmasks[m_name][start:end]]
-        #     print(self.outmasks[m_name][start:start+4].tolist())
-
-        # return total_mask
 
     def add_var(self, mask_name, var_name, start, end):
         variable = self.outmasks[var_name][start:end]

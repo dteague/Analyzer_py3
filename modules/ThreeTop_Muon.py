@@ -26,15 +26,19 @@ class Muon(Process):
                      inmask = "Muon_basicFakeMask", vals = Muon.close_jet)
         self.add_job("fullIso", outmask = "Muon_fakeMask",
                      inmask = "Muon_basicFakeMask", vals = Muon.v_fullIso,
-                     addvals = {"Muon_closeJetIndex": None})
+                     addvals = [(None, "Muon_closeJetIndex")])
         
         self.add_job("tight_mask", outmask = "Muon_finalMask",
                      inmask = "Muon_fakeMask", vals = Muon.tight)
 
         self.add_job("pass_zveto", outmask = "Muon_ZVeto",
                      inmask = "Muon_looseMask", vals = Muon.muon_part,
-                     addvals = {"Muon_looseIndex": "Muon_finalMask"})
+                     addvals = [("Muon_finalMask", "Muon_looseIndex")])
 
+        self.add_job("lep_sf", outmask = "Muon_scale", inmask = "Muon_looseMask",
+                     vals = pre("Muon", ["pt", "eta"]))
+        self.add_job("lep_tracking_sf", outmask = "Muon_trackingScale",
+                     inmask = "Muon_looseMask", vals = ["Muon_eta"])
     # Numba methods
 
     loose = pre("Muon", ["pt", "eta", "isGlobal", "isTracker", "isPFcand",
@@ -112,7 +116,7 @@ class Muon(Process):
             builder.begin_list()
             for midx in range(len(event.Muon_eta)):
                 jidx = int(event.Muon_closeJetIndex[midx][0])
-                if event.Muon_pt[midx]/event.Jet_pt[jidx] > I2:
+                if jidx < 0 or event.Muon_pt[midx]/event.Jet_pt[jidx] > I2:
                     builder.boolean(True)
                     continue
                 jetrel = jetRel(event.Muon_pt[midx], event.Muon_eta[midx],
@@ -141,3 +145,27 @@ class Muon(Process):
                 if not passed:
                     break
             builder.boolean(passed)
+
+    @staticmethod
+    @numba.vectorize('f4(f4,f4)')
+    def lep_sf(pt, eta):
+        sf = np.array([[0.9047, 0.8860, 0.8916, 0.8394],
+                       [0.9430, 0.9685, 0.9741, 0.8917],
+                       [0.9707, 0.9724, 0.9777, 0.9180],
+                       [0.9821, 0.9850, 0.9934, 0.9389],
+                       [0.9854, 0.9861, 0.9968, 0.9453],
+                       [0.9813, 0.9819, 0.9964, 0.9410],
+                       [0.9830, 0.9861, 0.9994, 0.9525]])
+        pt_edges = np.array([20, 25, 30, 40, 50, 60, 14000])
+        eta_edges = np.array([0.9, 1.2, 2.1, 2.4])
+
+        return sf[np.argmax(pt <= pt_edges), np.argmax(abs(eta) <= eta_edges)]
+
+    @staticmethod
+    @numba.vectorize('f4(f4)')
+    def lep_tracking_sf(eta):
+        sf = np.array([0.9879, 0.9939, 0.9970, 0.9954, 0.9937, 0.9959, 0.9976,
+                       0.9961, 0.9930, 0.9819])
+        eta_edges = np.array([-2.1, -1.6, -1.1, -0.6, 0.0, 0.6, 1.1, 1.6,
+                              2.1, 2.4])
+        return sf[np.argmax(eta <= eta_edges)]

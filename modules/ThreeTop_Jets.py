@@ -13,14 +13,12 @@ class Jet(Process):
         super().__init__(process)
 
         self.add_job("closeJet", outmask="Jet_rmCloseJet", vals = Jet.close_jet,
-                     addvals = {"Electron_closeJetIndex": "Electron_fakeMask",
-                                "Muon_closeJetIndex": "Muon_fakeMask"})
+                     addvals = [("Electron_fakeMask","Electron_closeJetIndex"),
+                                ("Muon_fakeMask", "Muon_closeJetIndex")])
         self.add_job("jet_mask", outmask = "Jet_jetMask",
-                     inmask="Jet_rmCloseJet",
-                     vals = Jet.jet)
+                     inmask="Jet_rmCloseJet", vals = Jet.jet)
         self.add_job("bjet_mask", outmask = "Jet_bjetMask",
-                     inmask="Jet_rmCloseJet",
-                     vals = Jet.bjet)
+                     inmask="Jet_rmCloseJet", vals = Jet.bjet)
 
     # Numba methods
     close_jet = ["Muon_eta", "Muon_phi", "Jet_eta", "Jet_phi",
@@ -33,14 +31,11 @@ class Jet(Process):
             builder.begin_list()
             close_jet = []
             for i in range(len(event.Electron_closeJetIndex)):
-                if j == 3:
-                    print(event.Electron_closeJetIndex[i][0], event.Electron_closeJetIndex[i][1])
                 if event.Electron_closeJetIndex[i][1] < 0.16:
                     close_jet.append(int(event.Electron_closeJetIndex[i][0]))
             for i in range(len(event.Muon_closeJetIndex)):
                 if event.Muon_closeJetIndex[i][1] < 0.16:
                     close_jet.append(int(event.Muon_closeJetIndex[i][0]))
-            # print(close_jet)
             for jidx in range(len(event.Jet_eta)):
                 isClose = jidx in close_jet
                 builder.boolean(not isClose)
@@ -67,9 +62,9 @@ class Jet(Process):
         btag_cut = 0.6324 # 2016
         # btag_cut = 0.4941 # 2017
         # btag_cut = 0.4184 # 2018
-        return (True
-            # pt > 25 and
-            # abs(eta) < 2.4 and
-            # (jetId & jetId_key) != 0 and
-            # btag > btag_cut
+        return (
+            pt > 25 and
+            abs(eta) < 2.4 and
+            (jetId & jetId_key) != 0 and
+            btag > btag_cut
         )

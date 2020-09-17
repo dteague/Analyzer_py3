@@ -10,11 +10,12 @@ class CutApplier:
     cut_list = list()
     var_list = list()
     der_var_list = list()
-    def __init__(self, arrays):
+    def __init__(self, arrays, xsec):
         self.arrays = arrays
         self.cuts = np.ones(len(arrays), dtype=bool)
         self.all_vars = set()
-        
+        scale = xsec/len(self.arrays)
+        print(xsec, len(self.arrays))
         cuts = list()
         for cut_name in CutApplier.cut_list:
             for rep in ["Event", "Jet", "Electron", "Muon"]:
@@ -23,10 +24,11 @@ class CutApplier:
         self.cuts = np.all(cuts, axis=0)
         
         self.output = dict()
-        # self.output = {"scale_factor": ak.Array([1.]*len(arrays[self.cuts]))}
-        # for scale_name in CutApplier.sf_list:
-        #     self.output["scale_factor"] = (self.output["scale_factor"]
-        #                                    * arrays[scale_name][self.cuts])
+        self.output = {"scale_factor": ak.Array([scale]*len(arrays[self.cuts]))}
+        for scale_name in CutApplier.sf_list:
+            print(scale_name, ak.sum(arrays[scale_name][self.cuts]))
+            self.output["scale_factor"] = (self.output["scale_factor"]
+                                           * arrays[scale_name][self.cuts])
         for group, add_vars, _ in CutApplier.var_list:
             for var in add_vars:
                 self.output["{}/{}".format(group, var)] = ak.Array([])
@@ -35,9 +37,9 @@ class CutApplier:
         for group, add_vars in CutApplier.der_var_list:
             for var in add_vars:
                 self.output["{}/{}".format(group, var)] = self.arrays[var][self.cuts]
+        print(ak.sum(self.output["scale_factor"]))
 
-        print(ak.count_nonzero(self.cuts))
-
+        
     @staticmethod
     def add_scale_factor(scale_name):
         CutApplier.sf_list.append(scale_name)
@@ -55,11 +57,14 @@ class CutApplier:
         CutApplier.der_var_list.append((groupName, var_list))
 
     def run(self, filename):
-        start, end = 0, 0
         allvars = list(self.all_vars)
+        if len(allvars) == 0:
+            return
+        start, end = 0, 0
         for array in uproot.iterate("{}:Events".format(filename), allvars):
             end += len(array)
             mask = self.cuts[start:end]
+            print("Events Considered: {}".format(end))
             for group, add_vars, mask_name in CutApplier.var_list:
                 if mask_name is not None:
                     submask = self.arrays[mask_name][start:end]

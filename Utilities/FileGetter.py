@@ -75,6 +75,12 @@ class FileGetter:
                     return_dict[group] = self.fileInfo[group]["file_path"]
             return return_dict
 
+    def get_xsec(self, group):
+        scale = self.mcInfo[group]['cross_section']
+        if "kfactor" in self.mcInfo[group]:
+            scale *= self.mcInfo[group]["kfactor"]
+        return scale
+
 
 def get_generic_args():
     parser = argparse.ArgumentParser()
@@ -85,7 +91,10 @@ def get_generic_args():
                         help="Specificy analysis used")
     parser.add_argument("-s", "--selection", type=str, required=True,
                         help="Specificy selection used")
+    parser.add_argument("-c", "--channel", type=str, default="",
+                        help="Channels to run over")
     parser.add_argument("-j", type=int, default=1, help="Number of cores")
+    parser.add_argument("-r", action="store_true", help="Remake create files")
     parser.add_argument("-f", "--filenames", required=True,
                         type=lambda x : [i.strip() for i in x.split(',')],
                         help="List of input file names, "

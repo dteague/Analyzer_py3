@@ -12,28 +12,44 @@ from Utilities.FileGetter import pre
 class EventWide(Process):
     def __init__(self, process):
         super().__init__(process)
-
-        self.add_job("met_filter", outmask = "Event_MetFilterMask",
-                     vals = EventWide.filters)
-        self.add_job("pileup_scale", outmask = "Event_pileupScale",
-                     vals = ["Pileup_nTrueInt"])
-        self.add_job("wdecay_scale", outmask = "Event_wDecayScale",
-                     vals = EventWide.gen_vars)
+        # Calc Values
         self.add_job("set_channel", outmask = "Event_channels",
                      inmask = ["Electron_finalMask", "Muon_finalMask"],
                      vals = EventWide.lep_chans)
-        self.add_job("apply_trigger", outmask = "Event_triggerMask",
-                     vals = EventWide.triggers,
-                     addvals = {"Event_channels": None})
         self.add_job("calc_HT", outmask = "Event_HT", inmask = "Jet_jetMask",
                      vals = EventWide.ht)
         self.add_job("calc_centrality", outmask = "Event_centrality",
                      inmask = "Jet_jetMask", vals = EventWide.centrality,
-                     addvals = {"Event_HT": None})
+                     addvals = [(None, "Event_HT")])
         self.add_job("calc_sphericity", outmask = "Event_sphericity",
                      inmask = "Jet_jetMask", vals = EventWide.sphericity)
         self.add_job("save_var", outmask = "Event_MET",
                      vals = ["MET_pt"])
+
+        # Event Wide Masks
+        self.add_job("met_filter", outmask = "Event_MetFilterMask",
+                     vals = EventWide.filters)
+        self.add_job("apply_trigger", outmask = "Event_triggerMask",
+                     vals = EventWide.triggers,
+                     addvals = [(None, "Event_channels")])
+        
+        # Scale factors
+        self.add_job("pileup_scale", outmask = "Event_pileupScale",
+                     vals = ["Pileup_nTrueInt"])
+        self.add_job("wdecay_scale", outmask = "Event_wDecayScale",
+                     vals = EventWide.gen_vars)
+        self.add_job("save_var", outmask = "Event_genScale",
+                     vals = ["genWeight"])
+        # self.add_job("trigger_scale", outmask = "Event_triggerScale",
+        #              vals = ["genWeight"],
+        #              addvals = [(None, ["Event_HT", "Event_channels"])])
+        self.add_job("tight_lep_scale", outmask = "Event_tightLeptonScale",
+                     vals = ["genWeight"],
+                     addvals = [("Electron_finalMask", ["Electron_GSFScale",
+                                                        "Electron_lowHTScale",
+                                                        "Electron_highHTScale"]),
+                                ("Muon_finalMask", ["Muon_scale", "Muon_trackingScale"]),
+                                (None, "Event_HT")])
     # Numba methods
     # maybe just Flag_MetFilter?
     filters = pre("Flag",["goodVertices", "globalSuperTightHalo2016Filter",
@@ -70,7 +86,7 @@ class EventWide(Process):
             0.000730, 0.000949, 0.001355, 0.001894, 0.003082, 0.004097, 0.004874, 0.005256,
             0.005785, 0.005515, 0.005000, 0.004410, 0.004012, 0.003548, 0.003108, 0.002702,
             0.002337, 0.002025, 0.001723, ]
-        if int(pileup) < len(pileupScales):
+        if int(pileup) > len(pileupScales):
             return 0.
         else:
             return pileupScales[int(pileup)]
@@ -192,39 +208,37 @@ class EventWide(Process):
     @numba.vectorize("f4(f4)")
     def save_var(var):
         return var
-    # close_jet = ["Muon_eta", "Muon_pt", "Electron_eta", "Electron_pt"]
-    # @staticmethod
-    # @numba.jit(nopython=True)
-    # def trigger_scale(events, builder):
-    #     for event in events:
-    #         if len(event.Muon_pt) + len(event.Electron_pt) < 2:
-    #             builder.real(1)
-    #             continue
 
-    #         if
-
-            # float triggerScaleFactor(int pdgId1, int pdgId2, float pt1, float pt2, float eta1, float eta2, float ht) {
-#     // return TotalTriggerSF(pdgId1, pt1, eta1, pdgId2, pt2, eta2, ht);
-#     // Using Matthieu's macro, so dummy 1 here
-#     return 1.0; // FIXME
-
-
-#     if (ht>300) {
-# 	if ((abs(pdgId1)+abs(pdgId2))==22) return 1.;
-# 	if ((abs(pdgId1)+abs(pdgId2))==26) return 0.985*0.985;
-# 	if ((abs(pdgId1)+abs(pdgId2))==24) return 0.985;
-#     } else {
-# 	if ((abs(pdgId1)+abs(pdgId2))==22) return 0.997*0.997*0.998;
-# 	if ((abs(pdgId1)+abs(pdgId2))==26) return 0.982*0.985*0.973;
-# 	if ((abs(pdgId1)+abs(pdgId2))==24) {
-# 	    if (abs(pdgId1)==11) {
-# 		if (pt1>pt2) return 0.997*0.985;
-# 		else return 0.997*0.982;
-# 	    } else {
-# 		if (pt1>pt2) return 0.997*0.982;
-# 		else return 0.997*0.985;
-# 	    }
-# 	}
-#     }
-#     return 0.;
-# }
+    @staticmethod
+    @numba.vectorize('f4(f4,f4,f4)')
+    def trigger_scale(dummy, ht, chan):
+        if abs(chan) < 20 or abs(chan) >= 30:
+            return 1
+        if ht > 300:
+            nMuons = (abs(chan)-19)//2
+            return 0.985**nMuons
+        else:
+            if abs(chan) == 20:
+                return 0.997*0.997*0.998
+            elif abs(chan) == 21:
+                return 0.997*0.985
+            elif abs(chan) == 22:
+                return 0.997*0.982
+            elif abs(chan) == 23:
+                return 0.982*0.985*0.973
+        return 1
+            
+    @staticmethod
+    @numba.jit(nopython=True)
+    def tight_lep_scale(events, builder):
+        for event in events:
+            scale = 1.
+            for i in range(len(event.Electron_GSFScale)):
+                scale *= event.Electron_GSFScale[i]
+                if event.Event_HT < 300:
+                    scale *= event.Electron_lowHTScale[i]
+                else:
+                    scale *= event.Electron_highHTScale[i]
+            for i in range(len(event.Muon_scale)):
+                scale *= event.Muon_scale[i]*event.Muon_trackingScale[i]
+            builder.real(scale)
